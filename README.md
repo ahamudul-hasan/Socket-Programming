@@ -13,6 +13,7 @@ Welcome to the Socket Programming guide! This repository contains practical exam
 - [Project Structure](#project-structure)
 - [TCP Implementation](#tcp-implementation)
 - [UDP Implementation](#udp-implementation)
+- [Multi-Threading in Socket Programming](#threading-in-socket-programming)
 - [How to Run](#how-to-run)
 - [Key Differences Summary](#key-differences-summary)
 
@@ -166,13 +167,28 @@ UDP: ─────────────────────────
 
 ```
 Socket Programming/
-├── TCP/
+├── 1_Basic/
+│   └── server.py          (Basic Socket Server)
+│
+├── 2_TCP/
 │   ├── server.py          (TCP Server Implementation)
 │   └── client.py          (TCP Client Implementation)
 │
-├── UDP/
+├── 3_UDP/
 │   ├── server.py          (UDP Server Implementation)
 │   └── client.py          (UDP Client Implementation)
+│
+├── 4_Multi_Threading/
+│   ├── server.py          (Multi-Threaded TCP Server)
+│   └── client.py          (Multi-Threaded TCP Client)
+│
+├── 5_Practice1/
+│   ├── server.py
+│   └── client.py
+│
+├── 6_Practice2/
+│   ├── server.py
+│   └── client.py
 │
 └── README.md              (This file)
 ```
@@ -291,6 +307,202 @@ print(data.decode())
 - Sends directly with `sendto()`
 - `recvfrom()` returns data and sender address
 - Fast and simple!
+
+---
+
+## 🧵 Multi-Threading in Socket Programming
+
+### What is Multi-Threading?
+
+**Multi-threading** is a technique that allows a single program to handle **multiple tasks simultaneously**. In socket programming, it enables a server to handle multiple client connections at the same time by creating a new thread for each client.
+
+### Why Multi-Threading?
+
+**Problem:** A basic TCP server can only handle one client at a time. When the server is busy with one client, other clients have to wait.
+
+**Solution:** Multi-threading allows the server to:
+- ✅ Handle multiple clients concurrently
+- ✅ Keep the main thread available for accepting new connections
+- ✅ Prevent one slow client from blocking others
+- ✅ Improve server efficiency and responsiveness
+
+### How Multi-Threading Works
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Main Thread                           │
+│          (Always listening for new connections)         │
+│─────────────────────────────────────────────────────────│
+│                                                          │
+│  Server accepts Client 1 ──> Creates Thread 1           │
+│  Server accepts Client 2 ──> Creates Thread 2           │
+│  Server accepts Client 3 ──> Creates Thread 3           │
+│                                                          │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐    │
+│  │   Thread 1   │ │   Thread 2   │ │   Thread 3   │    │
+│  │ Handles      │ │ Handles      │ │ Handles      │    │
+│  │ Client 1     │ │ Client 2     │ │ Client 3     │    │
+│  │ (Concurrent) │ │ (Concurrent) │ │ (Concurrent) │    │
+│  └──────────────┘ └──────────────┘ └──────────────┘    │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Multi-Threaded TCP Server Implementation
+
+```python
+import socket
+import threading
+
+HEADER = 64
+PORT = 5050
+IP = socket.gethostbyname(socket.gethostname())
+ADDR = (IP, PORT)
+FORMAT = 'utf-8'
+DISCONNECT_MESSAGE = "!DISCONNECT"
+
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind(ADDR)
+
+def handle_client(conn, addr):
+    """Handle individual client in a separate thread"""
+    print(f"[NEW CONNECTION] {addr} connected.")
+    
+    connected = True
+    while connected:
+        # Receive message length first
+        msg_length = conn.recv(HEADER).decode(FORMAT)
+        
+        if msg_length:
+            msg_length = int(msg_length)
+            # Receive the actual message
+            msg = conn.recv(msg_length).decode(FORMAT)
+            
+            if msg == DISCONNECT_MESSAGE:
+                connected = False
+            
+            print(f"[{addr}] {msg}")
+    
+    conn.close()
+
+def start():
+    """Main server loop - accepts connections and creates threads"""
+    server.listen()
+    print(f"[LISTENING] Server is listening on {ADDR}")
+    
+    while True:
+        # Accept new client connection
+        conn, addr = server.accept()
+        
+        # Create a new thread to handle this client
+        thread = threading.Thread(target=handle_client, args=(conn, addr))
+        thread.start()
+        
+        # Display number of active threads
+        print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
+
+print("[STARTING] Server is starting....")
+start()
+```
+
+**Key Points:**
+- `threading.Thread()` - Creates a new thread
+- `target=handle_client` - Function to run in the thread
+- `args=(conn, addr)` - Arguments passed to the target function
+- `thread.start()` - Starts the thread execution
+- `threading.active_count()` - Returns number of active threads
+- Each client runs independently in its own thread
+
+### Multi-Threaded TCP Client
+
+```python
+import socket
+
+HEADER = 64
+PORT = 5050
+IP = "127.0.0.1"  # Change to server IP
+ADDR = (IP, PORT)
+FORMAT = 'utf-8'
+DISCONNECT_MESSAGE = "!DISCONNECT"
+
+def send_message(client, msg):
+    """Send a message with header indicating message length"""
+    message = msg.encode(FORMAT)
+    msg_length = len(message)
+    send_length = str(msg_length).encode(FORMAT)
+    send_length += b' ' * (HEADER - len(send_length))
+    
+    client.send(send_length)
+    client.send(message)
+
+client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client.connect(ADDR)
+
+# Send messages
+send_message(client, "Hello Server!")
+send_message(client, "This is Client 1")
+send_message(client, DISCONNECT_MESSAGE)
+
+client.close()
+```
+
+### Benefits of Multi-Threading
+
+| Benefit | Description |
+|---------|-------------|
+| **Concurrency** | Handle multiple clients simultaneously |
+| **Responsiveness** | Server doesn't block on one client |
+| **Resource Efficient** | Threads are lightweight compared to processes |
+| **Scalability** | Can handle many concurrent connections |
+| **Simplified Code** | Each thread handles one client independently |
+
+### Common Multi-Threading Patterns
+
+**1. Thread Pool (Limit Thread Count)**
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+with ThreadPoolExecutor(max_workers=10) as executor:
+    while True:
+        conn, addr = server.accept()
+        executor.submit(handle_client, conn, addr)
+```
+
+**2. Daemon Threads (Auto-close with Main Program)**
+```python
+thread = threading.Thread(target=handle_client, args=(conn, addr))
+thread.daemon = True  # Thread exits when main program exits
+thread.start()
+```
+
+**3. Thread Naming for Debugging**
+```python
+thread = threading.Thread(
+    target=handle_client, 
+    args=(conn, addr),
+    name=f"ClientThread-{addr}"
+)
+thread.start()
+```
+
+### Threading Considerations
+
+⚠️ **Important:**
+- **Avoid Race Conditions:** Use locks for shared resources
+- **Resource Management:** Limit number of threads to avoid memory issues
+- **Thread Safety:** Be careful with shared data between threads
+- **Debugging:** Multi-threaded code is harder to debug
+
+### Multi-Threading vs Single-Threading
+
+| Aspect | Single-Threaded | Multi-Threaded |
+|--------|-----------------|----------------|
+| **Clients Handled** | One at a time | Multiple simultaneously |
+| **Blocking** | Yes - others wait | No - each has own thread |
+| **Complexity** | Simple | More complex |
+| **Resource Usage** | Low | Medium-High |
+| **Scalability** | Limited | Better |
+| **Real-World Use** | Testing, demos | Production servers |
 
 ---
 
