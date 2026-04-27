@@ -6,6 +6,9 @@ IP = socket.gethostbyname(socket.gethostname())
 ADDR = (IP, PORT)
 FORMAT = 'utf-8'
 
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind(ADDR)
+
 def count_vowel(text):
     vowels = "aeiouAEIOU"
     count = 0
@@ -33,9 +36,6 @@ def handle_client(conn, addr):
     conn.close()
 
 def start():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(ADDR)
-
     server.listen()
     print(f"[STARTING] server is running....")
 
